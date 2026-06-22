@@ -117,10 +117,64 @@ Or with `npx` / `tsx` for development:
 }
 ```
 
+## Docker
+
+### Build & run with Docker Compose
+
+```bash
+cp .env.example .env
+# vul je keys in .env
+docker compose up --build
+```
+
+### Of direct via Docker
+
+```bash
+docker build -t arr-mcp .
+docker run --rm -i \
+  -e RADARR_URL=http://192.168.1.x:7878 \
+  -e RADARR_API_KEY=abc123 \
+  -e SONARR_URL=http://192.168.1.x:8989 \
+  -e SONARR_API_KEY=abc123 \
+  arr-mcp
+```
+
+### MCP client config (Docker)
+
+```json
+{
+  "mcpServers": {
+    "arr": {
+      "command": "docker",
+      "args": ["run", "--rm", "-i",
+        "-e", "RADARR_URL",
+        "-e", "RADARR_API_KEY",
+        "-e", "SONARR_URL",
+        "-e", "SONARR_API_KEY",
+        "-e", "PROWLARR_URL",
+        "-e", "PROWLARR_API_KEY",
+        "arr-mcp"
+      ],
+      "env": {
+        "RADARR_URL": "http://localhost:7878",
+        "RADARR_API_KEY": "...",
+        "SONARR_URL": "http://localhost:8989",
+        "SONARR_API_KEY": "...",
+        "PROWLARR_URL": "http://localhost:9696",
+        "PROWLARR_API_KEY": "..."
+      }
+    }
+  }
+}
+```
+
+> **Tip:** Als je \*ARR draait op de host machine gebruik dan `host.docker.internal` (Mac/Windows) of het host IP-adres in plaats van `localhost`.
+
 ## Development
 
 ```bash
-npm run dev   # run with tsx (no build step)
-npm run build # compile to dist/
-npm start     # run compiled output
+npm install
+npm run dev   # run met tsx (geen build stap)
+npm run build # compileer naar dist/
+npm start     # run gecompileerde output
 ```
