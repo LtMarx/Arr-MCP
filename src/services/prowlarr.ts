@@ -27,14 +27,18 @@ export interface SearchResult {
 }
 
 export class ProwlarrService {
-  private client: ArrClient;
-
-  constructor(client: ArrClient) {
-    this.client = client;
-  }
+  constructor(private client: ArrClient) {}
 
   async getIndexers(): Promise<Indexer[]> {
     return this.client.get<Indexer[]>("/indexer");
+  }
+
+  async testIndexer(id: number): Promise<{ isValid: boolean; failures?: string[] }> {
+    return this.client.post(`/indexer/test`, { id });
+  }
+
+  async testAllIndexers(): Promise<Array<{ id: number; isValid: boolean }>> {
+    return this.client.post("/indexer/testall", {});
   }
 
   async search(query: string, categories?: number[]): Promise<SearchResult[]> {

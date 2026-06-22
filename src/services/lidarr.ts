@@ -26,14 +26,12 @@ export interface Album {
 }
 
 export class LidarrService {
-  private client: ArrClient;
+  constructor(private client: ArrClient) {}
 
-  constructor(client: ArrClient) {
-    this.client = client;
-  }
-
-  async getArtists(): Promise<Artist[]> {
-    return this.client.get<Artist[]>("/artist");
+  async getArtists(offset = 0, limit = 0): Promise<Artist[]> {
+    const all = await this.client.get<Artist[]>("/artist");
+    if (limit > 0) return all.slice(offset, offset + limit);
+    return offset > 0 ? all.slice(offset) : all;
   }
 
   async searchArtists(term: string): Promise<Artist[]> {
@@ -59,9 +57,22 @@ export class LidarrService {
     });
   }
 
-  async getAlbums(artistId?: number): Promise<Album[]> {
+  async getAlbums(artistId?: number, offset = 0, limit = 0): Promise<Album[]> {
     const query = artistId ? `?artistId=${artistId}` : "";
-    return this.client.get<Album[]>(`/album${query}`);
+    const all = await this.client.get<Album[]>(`/album${query}`);
+    if (limit > 0) return all.slice(offset, offset + limit);
+    return offset > 0 ? all.slice(offset) : all;
+  }
+
+  async searchMissingAlbums(artistId: number): Promise<void> {
+    await this.client.post("/command", { name: "MissingAlbumSearch", artistId });
+  }
+
+  async getCalendar(start?: string, end?: string): Promise<Album[]> {
+    const params = new URLSearchParams();
+    if (start) params.set("start", start);
+    if (end) params.set("end", end);
+    return this.client.get<Album[]>(`/calendar?${params}`);
   }
 
   async getSystemStatus(): Promise<Record<string, unknown>> {
@@ -76,7 +87,19 @@ export class LidarrService {
     return this.client.get("/qualityprofile");
   }
 
+  async getMetadataProfiles(): Promise<Array<{ id: number; name: string }>> {
+    return this.client.get("/metadataprofile");
+  }
+
   async getRootFolders(): Promise<Array<{ id: number; path: string; freeSpace: number }>> {
     return this.client.get("/rootfolder");
+  }
+
+  async getDownloadClients(): Promise<Array<Record<string, unknown>>> {
+    return this.client.get("/downloadclient");
+  }
+
+  async getTags(): Promise<Array<{ id: number; label: string }>> {
+    return this.client.get("/tag");
   }
 }

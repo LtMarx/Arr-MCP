@@ -18,6 +18,7 @@ export interface Series {
   network?: string;
   airTime?: string;
   genres?: string[];
+  seasons?: unknown[];
 }
 
 export interface SeriesSearchResult {
@@ -29,6 +30,7 @@ export interface SeriesSearchResult {
   remotePoster?: string;
   network?: string;
   genres?: string[];
+  seasons?: unknown[];
 }
 
 export interface Episode {
@@ -44,14 +46,12 @@ export interface Episode {
 }
 
 export class SonarrService {
-  private client: ArrClient;
+  constructor(private client: ArrClient) {}
 
-  constructor(client: ArrClient) {
-    this.client = client;
-  }
-
-  async getSeries(): Promise<Series[]> {
-    return this.client.get<Series[]>("/series");
+  async getSeries(offset = 0, limit = 0): Promise<Series[]> {
+    const all = await this.client.get<Series[]>("/series");
+    if (limit > 0) return all.slice(offset, offset + limit);
+    return offset > 0 ? all.slice(offset) : all;
   }
 
   async getSeriesById(id: number): Promise<Series> {
@@ -69,9 +69,7 @@ export class SonarrService {
     monitored = true,
     searchForMissingEpisodes = true
   ): Promise<Series> {
-    const results = await this.client.get<(SeriesSearchResult & { tvdbId: number })[]>(
-      `/series/lookup?term=tvdb:${tvdbId}`
-    );
+    const results = await this.client.get<SeriesSearchResult[]>(`/series/lookup?term=tvdb:${tvdbId}`);
     const series = results[0] as Series & SeriesSearchResult;
     if (!series) throw new Error(`No series found with tvdbId ${tvdbId}`);
     return this.client.post<Series>("/series", {
@@ -79,7 +77,7 @@ export class SonarrService {
       qualityProfileId,
       rootFolderPath,
       monitored,
-      seasons: (series as { seasons?: unknown[] }).seasons ?? [],
+      seasons: series.seasons ?? [],
       addOptions: { searchForMissingEpisodes },
     });
   }
@@ -88,12 +86,41 @@ export class SonarrService {
     await this.client.delete(`/series/${id}?deleteFiles=${deleteFiles}`);
   }
 
-  async getEpisodes(seriesId: number): Promise<Episode[]> {
-    return this.client.get<Episode[]>(`/episode?seriesId=${seriesId}`);
+  async refreshSeries(seriesId: number): Promise<void> {
+    await this.client.post("/command", { name: "RefreshSeries", seriesId });
   }
 
-  async getQueue(): Promise<{ records: Array<Record<string, unknown>> }> {
-    return this.client.get("/queue?pageSize=100");
+  async getEpisodes(seriesId: number, seasonNumber?: number): Promise<Episode[]> {
+    const params = new URLSearchParams({ seriesId: String(seriesId) });
+    if (seasonNumber !== undefined) params.set("seasonNumber", String(seasonNumber));
+    return this.client.get<Episode[]>(`/episode?${params}`);
+  }
+
+  async searchMissingEpisodes(seriesId: number): Promise<void> {
+    await this.client.post("/command", { name: "MissingEpisodeSearch", seriesId });
+  }
+
+  async searchEpisode(episodeId: number): Promise<void> {
+    await this.client.post("/command", { name: "EpisodeSearch", episodeIds: [episodeId] });
+  }
+
+  async getQueue(offset = 0, limit = 25): Promise<{ records: Array<Record<string, unknown>>; totalRecords: number }> {
+    const res = await this.client.get<{ records: Array<Record<string, unknown>>; totalRecords: number }>(
+      "/queue?pageSize=100&page=1"
+    );
+    const records = res.records.slice(offset, offset + limit);
+    return { records, totalRecords: res.totalRecords };
+  }
+
+  async deleteQueueItem(id: number, blacklist = false): Promise<void> {
+    await this.client.delete(`/queue/${id}?blacklist=${blacklist}`);
+  }
+
+  async getCalendar(start?: string, end?: string): Promise<Episode[]> {
+    const params = new URLSearchParams();
+    if (start) params.set("start", start);
+    if (end) params.set("end", end);
+    return this.client.get<Episode[]>(`/calendar?${params}`);
   }
 
   async getSystemStatus(): Promise<Record<string, unknown>> {
@@ -110,5 +137,17 @@ export class SonarrService {
 
   async getRootFolders(): Promise<Array<{ id: number; path: string; freeSpace: number }>> {
     return this.client.get("/rootfolder");
+  }
+
+  async getDownloadClients(): Promise<Array<Record<string, unknown>>> {
+    return this.client.get("/downloadclient");
+  }
+
+  async getTags(): Promise<Array<{ id: number; label: string }>> {
+    return this.client.get("/tag");
+  }
+
+  async getNaming(): Promise<Record<string, unknown>> {
+    return this.client.get("/config/naming");
   }
 }
