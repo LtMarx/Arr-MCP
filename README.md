@@ -152,45 +152,73 @@ A `GET /health` endpoint is also available for uptime checks.
 
 ## Docker
 
-### Stdio (default)
+Het gepubliceerde image staat op GitHub Container Registry:
+
+```
+ghcr.io/ltmarx/arr-mcp:latest
+```
+
+De `docker-compose.yml` heeft twee profielen — `stdio` en `http` — die nooit tegelijk actief zijn.
+
+### HTTP mode — remote/persistent server
 
 ```bash
 cp .env.example .env   # vul je keys in
-docker compose up --build
+docker compose --profile http up
 ```
 
-### HTTP / remote
+De server luistert op `http://<host>:3000/mcp`. Poort aanpassen: `MCP_PORT=8080 docker compose --profile http up`.
+
+Controleer of de server draait:
 
 ```bash
-MCP_TRANSPORT=http MCP_PORT=3000 docker compose up --build
+curl http://localhost:3000/health
+# → {"status":"ok","transport":"http"}
 ```
 
-The container exposes the configured port. Point your MCP client to:
-
-```
-http://<host>:<port>/mcp
-```
-
-### Direct docker run
+### Stdio mode — lokaal (Claude Desktop)
 
 ```bash
-docker build -t arr-mcp .
+docker compose --profile stdio up
+```
 
-# stdio
+Of direct via `docker run` (wordt gestart door de MCP client):
+
+```bash
 docker run --rm -i \
   -e RADARR_URL=http://192.168.1.x:7878 \
   -e RADARR_API_KEY=abc123 \
-  arr-mcp
+  ghcr.io/ltmarx/arr-mcp:latest
+```
 
-# http
-docker run --rm -p 3000:3000 \
-  -e MCP_TRANSPORT=http \
-  -e RADARR_URL=http://192.168.1.x:7878 \
-  -e RADARR_API_KEY=abc123 \
-  arr-mcp
+MCP client config voor Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "arr": {
+      "command": "docker",
+      "args": ["run", "--rm", "-i",
+        "-e", "RADARR_URL", "-e", "RADARR_API_KEY",
+        "-e", "SONARR_URL", "-e", "SONARR_API_KEY",
+        "ghcr.io/ltmarx/arr-mcp:latest"
+      ],
+      "env": {
+        "RADARR_URL": "http://localhost:7878",
+        "RADARR_API_KEY": "...",
+        "SONARR_URL": "http://localhost:8989",
+        "SONARR_API_KEY": "..."
+      }
+    }
+  }
+}
 ```
 
 > **Tip:** Als je \*ARR draait op de host machine gebruik dan `host.docker.internal` (Mac/Windows) of het host IP-adres in plaats van `localhost`.
+
+## Releases
+
+Releases worden automatisch gepubliceerd via GitHub Actions. Maak een tag aan op GitHub (`v1.0.0`) en publiceer een Release — het multi-arch image (amd64 + arm64) verschijnt vanzelf op GHCR.
 
 ## Development
 

@@ -1,3 +1,17 @@
 node_modules/
 dist/
+
+# env files
 .env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# editors
+.vscode/
+.idea/
+*.swp
+*.swo
