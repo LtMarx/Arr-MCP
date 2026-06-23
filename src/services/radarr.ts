@@ -137,4 +137,50 @@ export class RadarrService {
   async getNaming(): Promise<Record<string, unknown>> {
     return this.client.get("/config/naming");
   }
+
+  async getReleases(movieId: number): Promise<Array<Record<string, unknown>>> {
+    return this.client.get(`/release?movieId=${movieId}`);
+  }
+
+  async grabRelease(guid: string, indexerId: number): Promise<Record<string, unknown>> {
+    return this.client.post("/release", { guid, indexerId });
+  }
+
+  async getHistory(offset = 0, limit = 25, eventType?: string): Promise<{ records: Array<Record<string, unknown>>; totalRecords: number }> {
+    const params = new URLSearchParams({ page: "1", pageSize: "100", sortKey: "date", sortDirection: "descending" });
+    if (eventType) params.set("eventType", eventType);
+    const res = await this.client.get<{ records: Array<Record<string, unknown>>; totalRecords: number }>(`/history?${params}`);
+    return { records: res.records.slice(offset, offset + limit), totalRecords: res.totalRecords };
+  }
+
+  async getBlocklist(offset = 0, limit = 25): Promise<{ records: Array<Record<string, unknown>>; totalRecords: number }> {
+    const res = await this.client.get<{ records: Array<Record<string, unknown>>; totalRecords: number }>("/blocklist?pageSize=100&page=1");
+    return { records: res.records.slice(offset, offset + limit), totalRecords: res.totalRecords };
+  }
+
+  async deleteBlocklistItem(id: number): Promise<void> {
+    await this.client.delete(`/blocklist/${id}`);
+  }
+
+  async getWantedMissing(offset = 0, limit = 25): Promise<{ records: Array<Record<string, unknown>>; totalRecords: number }> {
+    const res = await this.client.get<{ records: Array<Record<string, unknown>>; totalRecords: number }>(`/wanted/missing?pageSize=100&page=1&sortKey=releaseDate&sortDirection=descending`);
+    return { records: res.records.slice(offset, offset + limit), totalRecords: res.totalRecords };
+  }
+
+  async getWantedCutoffUnmet(offset = 0, limit = 25): Promise<{ records: Array<Record<string, unknown>>; totalRecords: number }> {
+    const res = await this.client.get<{ records: Array<Record<string, unknown>>; totalRecords: number }>(`/wanted/cutoff?pageSize=100&page=1`);
+    return { records: res.records.slice(offset, offset + limit), totalRecords: res.totalRecords };
+  }
+
+  async getDiskspace(): Promise<Array<Record<string, unknown>>> {
+    return this.client.get("/diskspace");
+  }
+
+  async getCommandStatus(commandId: number): Promise<Record<string, unknown>> {
+    return this.client.get(`/command/${commandId}`);
+  }
+
+  async bulkEditMovies(movieIds: number[], changes: { monitored?: boolean; qualityProfileId?: number; tags?: number[]; applyTags?: "add" | "remove" | "replace" }): Promise<Array<Record<string, unknown>>> {
+    return this.client.put("/movie/editor", { movieIds, ...changes });
+  }
 }

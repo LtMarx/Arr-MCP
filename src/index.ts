@@ -2,9 +2,8 @@ import { createServer } from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { ArrClient } from "./arr-client.js";
+import { ArrClient, ArrConfig } from "./arr-client.js";
 import { RadarrService } from "./services/radarr.js";
 import { SonarrService } from "./services/sonarr.js";
 import { LidarrService } from "./services/lidarr.js";
@@ -13,18 +12,19 @@ import { ProwlarrService } from "./services/prowlarr.js";
 
 // ─── CONFIG ────────────────────────────────────────────────────────────────
 
-function makeClient(urlKey: string, apiKeyKey: string): ArrClient | null {
+function makeClient(urlKey: string, apiKeyKey: string, apiVersion: ArrConfig["apiVersion"] = "v3"): ArrClient | null {
   const baseUrl = process.env[urlKey];
   const apiKey = process.env[apiKeyKey];
   if (!baseUrl || !apiKey) return null;
-  return new ArrClient({ baseUrl: baseUrl.replace(/\/$/, ""), apiKey });
+  return new ArrClient({ baseUrl: baseUrl.replace(/\/$/, ""), apiKey, apiVersion });
 }
 
-const radarrClient = makeClient("RADARR_URL", "RADARR_API_KEY");
-const sonarrClient = makeClient("SONARR_URL", "SONARR_API_KEY");
-const lidarrClient = makeClient("LIDARR_URL", "LIDARR_API_KEY");
-const readarrClient = makeClient("READARR_URL", "READARR_API_KEY");
-const prowlarrClient = makeClient("PROWLARR_URL", "PROWLARR_API_KEY");
+// Radarr and Sonarr use /api/v3; Lidarr, Readarr and Prowlarr use /api/v1
+const radarrClient = makeClient("RADARR_URL",   "RADARR_API_KEY",   "v3");
+const sonarrClient = makeClient("SONARR_URL",   "SONARR_API_KEY",   "v3");
+const lidarrClient = makeClient("LIDARR_URL",   "LIDARR_API_KEY",   "v1");
+const readarrClient = makeClient("READARR_URL", "READARR_API_KEY",  "v1");
+const prowlarrClient = makeClient("PROWLARR_URL","PROWLARR_API_KEY","v1");
 
 const radarr = radarrClient ? new RadarrService(radarrClient) : null;
 const sonarr = sonarrClient ? new SonarrService(sonarrClient) : null;
@@ -190,6 +190,90 @@ function buildServer(): McpServer {
       async ({ start, end }) => ok(await radarr.getCalendar(start, end))
     );
 
+    server.tool(
+      "radarr_get_releases",
+      "Get available releases for a movie from all indexers",
+      { movieId: z.number().describe("Radarr movie ID") },
+      async ({ movieId }) => ok(await radarr.getReleases(movieId))
+    );
+
+    server.tool(
+      "radarr_grab_release",
+      "Grab (download) a specific release by GUID",
+      {
+        guid: z.string().describe("Release GUID from radarr_get_releases"),
+        indexerId: z.number().describe("Indexer ID from the release"),
+      },
+      async ({ guid, indexerId }) => ok(await radarr.grabRelease(guid, indexerId))
+    );
+
+    server.tool(
+      "radarr_get_history",
+      "Get Radarr download history (grabs, imports, failures)",
+      {
+        offset: pagination.offset,
+        limit: pagination.limit,
+        eventType: z.string().optional().describe("grabbed | downloadFolderImported | downloadFailed | movieFileDeleted"),
+      },
+      async ({ offset, limit, eventType }) => ok(await radarr.getHistory(offset, limit, eventType))
+    );
+
+    server.tool(
+      "radarr_get_blocklist",
+      "Get Radarr blocklist (previously failed/blacklisted releases)",
+      { offset: pagination.offset, limit: pagination.limit },
+      async ({ offset, limit }) => ok(await radarr.getBlocklist(offset, limit))
+    );
+
+    server.tool(
+      "radarr_delete_blocklist_item",
+      "Remove an item from the Radarr blocklist",
+      { id: z.number().describe("Blocklist item ID") },
+      async ({ id }) => { await radarr.deleteBlocklistItem(id); return ok({ success: true }); }
+    );
+
+    server.tool(
+      "radarr_get_wanted_missing",
+      "Get movies that are monitored but have no file",
+      { offset: pagination.offset, limit: pagination.limit },
+      async ({ offset, limit }) => ok(await radarr.getWantedMissing(offset, limit))
+    );
+
+    server.tool(
+      "radarr_get_wanted_cutoff",
+      "Get movies that don't meet the quality cutoff",
+      { offset: pagination.offset, limit: pagination.limit },
+      async ({ offset, limit }) => ok(await radarr.getWantedCutoffUnmet(offset, limit))
+    );
+
+    server.tool(
+      "radarr_get_diskspace",
+      "Get disk space for all root folders in Radarr",
+      {},
+      async () => ok(await radarr.getDiskspace())
+    );
+
+    server.tool(
+      "radarr_get_command_status",
+      "Check the status of a previously triggered command",
+      { commandId: z.number().describe("Command ID returned when triggering a command") },
+      async ({ commandId }) => ok(await radarr.getCommandStatus(commandId))
+    );
+
+    server.tool(
+      "radarr_bulk_edit",
+      "Edit multiple movies at once (monitored, quality profile, tags)",
+      {
+        movieIds: z.array(z.number()).describe("List of Radarr movie IDs"),
+        monitored: z.boolean().optional(),
+        qualityProfileId: z.number().optional(),
+        tags: z.array(z.number()).optional().describe("Tag IDs to apply"),
+        applyTags: z.enum(["add", "remove", "replace"]).optional().default("add"),
+      },
+      async ({ movieIds, monitored, qualityProfileId, tags, applyTags }) =>
+        ok(await radarr.bulkEditMovies(movieIds, { monitored, qualityProfileId, tags, applyTags }))
+    );
+
     server.tool("radarr_get_health", "Get Radarr health warnings", {}, async () => ok(await radarr.getHealth()));
     server.tool("radarr_get_status", "Get Radarr system status", {}, async () => ok(await radarr.getSystemStatus()));
     server.tool("radarr_get_quality_profiles", "List quality profiles in Radarr", {}, async () => ok(await radarr.getQualityProfiles()));
@@ -310,6 +394,90 @@ function buildServer(): McpServer {
     server.tool("sonarr_get_download_clients", "List download clients configured in Sonarr", {}, async () => ok(await sonarr.getDownloadClients()));
     server.tool("sonarr_get_tags", "List tags in Sonarr", {}, async () => ok(await sonarr.getTags()));
     server.tool("sonarr_get_naming", "Get file naming configuration in Sonarr", {}, async () => ok(await sonarr.getNaming()));
+
+    server.tool(
+      "sonarr_get_releases",
+      "Get available releases for a specific episode from all indexers",
+      { episodeId: z.number().describe("Sonarr episode ID") },
+      async ({ episodeId }) => ok(await sonarr.getReleases(episodeId))
+    );
+
+    server.tool(
+      "sonarr_grab_release",
+      "Grab (download) a specific release by GUID",
+      {
+        guid: z.string().describe("Release GUID from sonarr_get_releases"),
+        indexerId: z.number().describe("Indexer ID from the release"),
+      },
+      async ({ guid, indexerId }) => ok(await sonarr.grabRelease(guid, indexerId))
+    );
+
+    server.tool(
+      "sonarr_get_history",
+      "Get Sonarr download history (grabs, imports, failures)",
+      {
+        offset: pagination.offset,
+        limit: pagination.limit,
+        eventType: z.string().optional().describe("grabbed | downloadFolderImported | downloadFailed | episodeFileDeleted"),
+      },
+      async ({ offset, limit, eventType }) => ok(await sonarr.getHistory(offset, limit, eventType))
+    );
+
+    server.tool(
+      "sonarr_get_blocklist",
+      "Get Sonarr blocklist (previously failed/blacklisted releases)",
+      { offset: pagination.offset, limit: pagination.limit },
+      async ({ offset, limit }) => ok(await sonarr.getBlocklist(offset, limit))
+    );
+
+    server.tool(
+      "sonarr_delete_blocklist_item",
+      "Remove an item from the Sonarr blocklist",
+      { id: z.number().describe("Blocklist item ID") },
+      async ({ id }) => { await sonarr.deleteBlocklistItem(id); return ok({ success: true }); }
+    );
+
+    server.tool(
+      "sonarr_get_wanted_missing",
+      "Get episodes that are monitored but have no file",
+      { offset: pagination.offset, limit: pagination.limit },
+      async ({ offset, limit }) => ok(await sonarr.getWantedMissing(offset, limit))
+    );
+
+    server.tool(
+      "sonarr_get_wanted_cutoff",
+      "Get episodes that don't meet the quality cutoff",
+      { offset: pagination.offset, limit: pagination.limit },
+      async ({ offset, limit }) => ok(await sonarr.getWantedCutoffUnmet(offset, limit))
+    );
+
+    server.tool(
+      "sonarr_get_diskspace",
+      "Get disk space for all root folders in Sonarr",
+      {},
+      async () => ok(await sonarr.getDiskspace())
+    );
+
+    server.tool(
+      "sonarr_get_command_status",
+      "Check the status of a previously triggered command in Sonarr",
+      { commandId: z.number().describe("Command ID") },
+      async ({ commandId }) => ok(await sonarr.getCommandStatus(commandId))
+    );
+
+    server.tool(
+      "sonarr_bulk_edit",
+      "Edit multiple series at once (monitored, quality profile, tags)",
+      {
+        seriesIds: z.array(z.number()).describe("List of Sonarr series IDs"),
+        monitored: z.boolean().optional(),
+        qualityProfileId: z.number().optional(),
+        tags: z.array(z.number()).optional(),
+        applyTags: z.enum(["add", "remove", "replace"]).optional().default("add"),
+      },
+      async ({ seriesIds, monitored, qualityProfileId, tags, applyTags }) =>
+        ok(await sonarr.bulkEditSeries(seriesIds, { monitored, qualityProfileId, tags, applyTags }))
+    );
   }
 
   // ── LIDARR ────────────────────────────────────────────────────────────

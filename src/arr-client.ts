@@ -1,13 +1,18 @@
 export interface ArrConfig {
   baseUrl: string;
   apiKey: string;
+  apiVersion?: "v1" | "v3";
 }
 
 export class ArrClient {
-  constructor(private config: ArrConfig) {}
+  private apiBase: string;
+
+  constructor(private config: ArrConfig) {
+    this.apiBase = `/api/${config.apiVersion ?? "v3"}`;
+  }
 
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
-    const url = `${this.config.baseUrl}/api/v3${path}`;
+    const url = `${this.config.baseUrl}${this.apiBase}${path}`;
     const res = await fetch(url, {
       ...options,
       headers: {

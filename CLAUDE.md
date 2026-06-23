@@ -75,4 +75,16 @@ npm start       # Gecompileerde versie starten
 
 ## *ARR API-conventies
 
-Alle *ARR apps gebruiken dezelfde REST API-stijl op `/api/v3/*` met `X-Api-Key` header. Radarr/Sonarr/Lidarr/Readarr hebben identieke endpoints voor health, quality profiles, root folders, download clients, tags en naming. Prowlarr wijkt licht af (geen `/movie` of `/series`, wel `/indexer` en `/search`).
+| Service | API versie |
+|---|---|
+| Radarr | `/api/v3` |
+| Sonarr | `/api/v3` |
+| Lidarr | `/api/v1` |
+| Readarr | `/api/v1` |
+| Prowlarr | `/api/v1` |
+
+De versie wordt per client meegegeven via `ArrConfig.apiVersion`. `ArrClient` bouwt de base path als `/api/${apiVersion}`.
+
+Radarr/Sonarr/Lidarr/Readarr hebben identieke endpoints voor health, quality profiles, root folders, download clients, tags en naming. Prowlarr wijkt af (geen `/movie` of `/series`, wel `/indexer` en `/search`).
+
+Release-flow (Radarr/Sonarr): `GET /release?movieId=X` → kandidaten ophalen → `POST /release { guid, indexerId }` → grab triggeren.
