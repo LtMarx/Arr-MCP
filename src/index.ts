@@ -4,6 +4,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import { ArrClient, ArrConfig } from "./arr-client.js";
+import { log } from "./logger.js";
 import { RadarrService } from "./services/radarr.js";
 import { SonarrService } from "./services/sonarr.js";
 import { LidarrService } from "./services/lidarr.js";
@@ -12,19 +13,19 @@ import { ProwlarrService } from "./services/prowlarr.js";
 
 // ─── CONFIG ────────────────────────────────────────────────────────────────
 
-function makeClient(urlKey: string, apiKeyKey: string, apiVersion: ArrConfig["apiVersion"] = "v3"): ArrClient | null {
+function makeClient(urlKey: string, apiKeyKey: string, apiVersion: ArrConfig["apiVersion"] = "v3", serviceName: string): ArrClient | null {
   const baseUrl = process.env[urlKey];
   const apiKey = process.env[apiKeyKey];
   if (!baseUrl || !apiKey) return null;
-  return new ArrClient({ baseUrl: baseUrl.replace(/\/$/, ""), apiKey, apiVersion });
+  return new ArrClient({ baseUrl: baseUrl.replace(/\/$/, ""), apiKey, apiVersion, serviceName });
 }
 
 // Radarr and Sonarr use /api/v3; Lidarr, Readarr and Prowlarr use /api/v1
-const radarrClient = makeClient("RADARR_URL",   "RADARR_API_KEY",   "v3");
-const sonarrClient = makeClient("SONARR_URL",   "SONARR_API_KEY",   "v3");
-const lidarrClient = makeClient("LIDARR_URL",   "LIDARR_API_KEY",   "v1");
-const readarrClient = makeClient("READARR_URL", "READARR_API_KEY",  "v1");
-const prowlarrClient = makeClient("PROWLARR_URL","PROWLARR_API_KEY","v1");
+const radarrClient  = makeClient("RADARR_URL",   "RADARR_API_KEY",   "v3", "radarr");
+const sonarrClient  = makeClient("SONARR_URL",   "SONARR_API_KEY",   "v3", "sonarr");
+const lidarrClient  = makeClient("LIDARR_URL",   "LIDARR_API_KEY",   "v1", "lidarr");
+const readarrClient = makeClient("READARR_URL",  "READARR_API_KEY",  "v1", "readarr");
+const prowlarrClient = makeClient("PROWLARR_URL","PROWLARR_API_KEY", "v1", "prowlarr");
 
 const radarr = radarrClient ? new RadarrService(radarrClient) : null;
 const sonarr = sonarrClient ? new SonarrService(sonarrClient) : null;
@@ -652,6 +653,8 @@ async function startStdio() {
 async function startHttp() {
   // Each request gets its own transport+server instance (stateless).
   const httpServer = createServer(async (req, res) => {
+    const start = Date.now();
+
     if (req.method === "GET" && req.url === "/health") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ status: "ok", transport: "http" }));
@@ -659,6 +662,7 @@ async function startHttp() {
     }
 
     if (req.url !== "/mcp") {
+      log.warn("http unknown path", { method: req.method, url: req.url });
       res.writeHead(404);
       res.end("Not found. Use POST /mcp");
       return;
@@ -668,37 +672,64 @@ async function startHttp() {
     const t = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     await server.connect(t);
 
-    // Parse body
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(chunk as Buffer);
-    const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : undefined;
+    const rawBody = chunks.length ? Buffer.concat(chunks).toString() : undefined;
 
-    await t.handleRequest(req, res, body);
+    let body: unknown;
+    try {
+      body = rawBody ? JSON.parse(rawBody) : undefined;
+    } catch {
+      log.warn("http invalid json body", { url: req.url, bodyPreview: rawBody?.slice(0, 100) });
+      res.writeHead(400);
+      res.end("Invalid JSON");
+      return;
+    }
+
+    const method = (body as Record<string, unknown>)?.method as string | undefined;
+    log.debug("mcp request", { mcpMethod: method });
+
+    try {
+      await t.handleRequest(req, res, body);
+      log.debug("mcp response", { mcpMethod: method, ms: Date.now() - start });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      log.error("mcp handler error", { mcpMethod: method, error: message, ms: Date.now() - start });
+      if (!res.headersSent) {
+        res.writeHead(500);
+        res.end("Internal server error");
+      }
+    }
   });
 
   httpServer.listen(httpPort, httpHost, () => {
-    process.stderr.write(`arr-mcp HTTP server listening on http://${httpHost}:${httpPort}/mcp\n`);
+    log.info("http server started", { url: `http://${httpHost}:${httpPort}/mcp` });
     logConfigured();
   });
 }
 
 function logConfigured() {
-  const configured = [
-    radarr && "Radarr",
-    sonarr && "Sonarr",
-    lidarr && "Lidarr",
-    readarr && "Readarr",
-    prowlarr && "Prowlarr",
-  ].filter(Boolean);
-  process.stderr.write(
-    `Configured: ${configured.join(", ") || "none (set *_URL + *_API_KEY env vars)"}\n`
-  );
+  const services = [
+    radarr   && { name: "Radarr",   url: process.env.RADARR_URL },
+    sonarr   && { name: "Sonarr",   url: process.env.SONARR_URL },
+    lidarr   && { name: "Lidarr",   url: process.env.LIDARR_URL },
+    readarr  && { name: "Readarr",  url: process.env.READARR_URL },
+    prowlarr && { name: "Prowlarr", url: process.env.PROWLARR_URL },
+  ].filter(Boolean) as Array<{ name: string; url: string }>;
+
+  if (services.length === 0) {
+    log.warn("no services configured", { hint: "set *_URL and *_API_KEY environment variables" });
+  } else {
+    for (const s of services) {
+      log.info("service configured", { service: s.name, url: s.url });
+    }
+  }
 }
 
 // ─── START ─────────────────────────────────────────────────────────────────
 
 if (transport === "http") {
-  startHttp().catch((err) => { process.stderr.write(`Fatal: ${err}\n`); process.exit(1); });
+  startHttp().catch((err) => { log.error("fatal", { error: String(err) }); process.exit(1); });
 } else {
-  startStdio().catch((err) => { process.stderr.write(`Fatal: ${err}\n`); process.exit(1); });
+  startStdio().catch((err) => { log.error("fatal", { error: String(err) }); process.exit(1); });
 }
