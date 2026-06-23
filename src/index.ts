@@ -56,7 +56,7 @@ const dateRange = {
 // ─── SERVER FACTORY ────────────────────────────────────────────────────────
 
 function buildServer(): McpServer {
-  const server = new McpServer({ name: "arr-mcp", version: "2.0.0" });
+  const server = new McpServer({ name: "arr-mcp", version: "1.1.0" });
 
   // ── DISCOVERY ─────────────────────────────────────────────────────────
 
