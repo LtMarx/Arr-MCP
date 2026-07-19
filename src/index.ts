@@ -56,7 +56,7 @@ const dateRange = {
 // ─── SERVER FACTORY ────────────────────────────────────────────────────────
 
 function buildServer(): McpServer {
-  const server = new McpServer({ name: "arr-mcp", version: "1.1.0" });
+  const server = new McpServer({ name: "arr-mcp", version: "1.2.0" });
 
   // ── DISCOVERY ─────────────────────────────────────────────────────────
 
@@ -68,7 +68,13 @@ function buildServer(): McpServer {
       { name: "Radarr",   configured: radarr   !== null, url: process.env.RADARR_URL },
       { name: "Sonarr",   configured: sonarr   !== null, url: process.env.SONARR_URL },
       { name: "Lidarr",   configured: lidarr   !== null, url: process.env.LIDARR_URL },
-      { name: "Readarr",  configured: readarr  !== null, url: process.env.READARR_URL },
+      {
+        name: "Readarr",
+        configured: readarr !== null,
+        url: process.env.READARR_URL,
+        deprecated: true,
+        note: "Readarr is retired by upstream (since May 2024). Metadata may be unreliable; consider a metadata mirror like rreading-glasses.",
+      },
       { name: "Prowlarr", configured: prowlarr !== null, url: process.env.PROWLARR_URL },
     ])
   );
@@ -533,6 +539,86 @@ function buildServer(): McpServer {
       async ({ start, end }) => ok(await lidarr.getCalendar(start, end))
     );
 
+    server.tool(
+      "lidarr_get_releases",
+      "Get available releases for an album from all indexers",
+      { albumId: z.number().describe("Lidarr album ID") },
+      async ({ albumId }) => ok(await lidarr.getReleases(albumId))
+    );
+
+    server.tool(
+      "lidarr_grab_release",
+      "Grab (download) a specific release by GUID",
+      {
+        guid: z.string().describe("Release GUID from lidarr_get_releases"),
+        indexerId: z.number().describe("Indexer ID from the release"),
+      },
+      async ({ guid, indexerId }) => ok(await lidarr.grabRelease(guid, indexerId))
+    );
+
+    server.tool(
+      "lidarr_get_history",
+      "Get Lidarr download history (grabs, imports, failures)",
+      {
+        offset: pagination.offset,
+        limit: pagination.limit,
+        eventType: z.string().optional().describe("grabbed | downloadFolderImported | downloadFailed | trackFileDeleted"),
+      },
+      async ({ offset, limit, eventType }) => ok(await lidarr.getHistory(offset, limit, eventType))
+    );
+
+    server.tool(
+      "lidarr_get_blocklist",
+      "Get Lidarr blocklist (previously failed/blacklisted releases)",
+      { offset: pagination.offset, limit: pagination.limit },
+      async ({ offset, limit }) => ok(await lidarr.getBlocklist(offset, limit))
+    );
+
+    server.tool(
+      "lidarr_delete_blocklist_item",
+      "Remove an item from the Lidarr blocklist",
+      { id: z.number().describe("Blocklist item ID") },
+      async ({ id }) => { await lidarr.deleteBlocklistItem(id); return ok({ success: true }); }
+    );
+
+    server.tool(
+      "lidarr_get_wanted_missing",
+      "Get albums that are monitored but have no file",
+      { offset: pagination.offset, limit: pagination.limit },
+      async ({ offset, limit }) => ok(await lidarr.getWantedMissing(offset, limit))
+    );
+
+    server.tool(
+      "lidarr_get_queue",
+      "Get Lidarr download queue",
+      { offset: pagination.offset, limit: pagination.limit },
+      async ({ offset, limit }) => ok(await lidarr.getQueue(offset, limit))
+    );
+
+    server.tool(
+      "lidarr_delete_queue_item",
+      "Remove an item from the Lidarr download queue",
+      {
+        id: z.number().describe("Queue item ID"),
+        blacklist: z.boolean().optional().default(false).describe("Add release to blocklist"),
+      },
+      async ({ id, blacklist }) => { await lidarr.deleteQueueItem(id, blacklist); return ok({ success: true }); }
+    );
+
+    server.tool(
+      "lidarr_get_diskspace",
+      "Get disk space for all root folders in Lidarr",
+      {},
+      async () => ok(await lidarr.getDiskspace())
+    );
+
+    server.tool(
+      "lidarr_get_command_status",
+      "Check the status of a previously triggered command in Lidarr",
+      { commandId: z.number().describe("Command ID") },
+      async ({ commandId }) => ok(await lidarr.getCommandStatus(commandId))
+    );
+
     server.tool("lidarr_get_health", "Get Lidarr health warnings", {}, async () => ok(await lidarr.getHealth()));
     server.tool("lidarr_get_status", "Get Lidarr system status", {}, async () => ok(await lidarr.getSystemStatus()));
     server.tool("lidarr_get_quality_profiles", "List quality profiles in Lidarr", {}, async () => ok(await lidarr.getQualityProfiles()));
@@ -633,6 +719,16 @@ function buildServer(): McpServer {
       async ({ query, categories }) => ok(await prowlarr.search(query, categories))
     );
 
+    server.tool(
+      "prowlarr_grab",
+      "Grab (download) a specific release found via prowlarr_search",
+      {
+        guid: z.string().describe("Release GUID from prowlarr_search"),
+        indexerId: z.number().describe("Indexer ID from the release"),
+      },
+      async ({ guid, indexerId }) => ok(await prowlarr.grab(guid, indexerId))
+    );
+
     server.tool("prowlarr_get_indexer_stats", "Get Prowlarr indexer statistics", {}, async () => ok(await prowlarr.getIndexerStats()));
     server.tool("prowlarr_get_health", "Get Prowlarr health warnings", {}, async () => ok(await prowlarr.getHealth()));
     server.tool("prowlarr_get_status", "Get Prowlarr system status", {}, async () => ok(await prowlarr.getSystemStatus()));
@@ -723,6 +819,12 @@ function logConfigured() {
     for (const s of services) {
       log.info("service configured", { service: s.name, url: s.url });
     }
+  }
+
+  if (readarr) {
+    log.warn("Readarr is retired by upstream", {
+      hint: "metadata may be unreliable; see https://wiki.servarr.com/readarr",
+    });
   }
 }
 

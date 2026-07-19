@@ -102,4 +102,50 @@ export class LidarrService {
   async getTags(): Promise<Array<{ id: number; label: string }>> {
     return this.client.get("/tag");
   }
+
+  async getReleases(albumId: number): Promise<Array<Record<string, unknown>>> {
+    return this.client.get(`/release?albumId=${albumId}`);
+  }
+
+  async grabRelease(guid: string, indexerId: number): Promise<Record<string, unknown>> {
+    return this.client.post("/release", { guid, indexerId });
+  }
+
+  async getHistory(offset = 0, limit = 25, eventType?: string): Promise<{ records: Array<Record<string, unknown>>; totalRecords: number }> {
+    const params = new URLSearchParams({ page: "1", pageSize: "100", sortKey: "date", sortDirection: "descending" });
+    if (eventType) params.set("eventType", eventType);
+    const res = await this.client.get<{ records: Array<Record<string, unknown>>; totalRecords: number }>(`/history?${params}`);
+    return { records: res.records.slice(offset, offset + limit), totalRecords: res.totalRecords };
+  }
+
+  async getBlocklist(offset = 0, limit = 25): Promise<{ records: Array<Record<string, unknown>>; totalRecords: number }> {
+    const res = await this.client.get<{ records: Array<Record<string, unknown>>; totalRecords: number }>("/blocklist?pageSize=100&page=1");
+    return { records: res.records.slice(offset, offset + limit), totalRecords: res.totalRecords };
+  }
+
+  async deleteBlocklistItem(id: number): Promise<void> {
+    await this.client.delete(`/blocklist/${id}`);
+  }
+
+  async getWantedMissing(offset = 0, limit = 25): Promise<{ records: Array<Record<string, unknown>>; totalRecords: number }> {
+    const res = await this.client.get<{ records: Array<Record<string, unknown>>; totalRecords: number }>(`/wanted/missing?pageSize=100&page=1&sortKey=releaseDate&sortDirection=descending`);
+    return { records: res.records.slice(offset, offset + limit), totalRecords: res.totalRecords };
+  }
+
+  async getQueue(offset = 0, limit = 25): Promise<{ records: Array<Record<string, unknown>>; totalRecords: number }> {
+    const res = await this.client.get<{ records: Array<Record<string, unknown>>; totalRecords: number }>(`/queue?pageSize=100&page=1`);
+    return { records: res.records.slice(offset, offset + limit), totalRecords: res.totalRecords };
+  }
+
+  async deleteQueueItem(id: number, blacklist = false): Promise<void> {
+    await this.client.delete(`/queue/${id}?blacklist=${blacklist}`);
+  }
+
+  async getDiskspace(): Promise<Array<Record<string, unknown>>> {
+    return this.client.get("/diskspace");
+  }
+
+  async getCommandStatus(commandId: number): Promise<Record<string, unknown>> {
+    return this.client.get(`/command/${commandId}`);
+  }
 }

@@ -4,6 +4,8 @@
 
 Een MCP (Model Context Protocol) server die AI-assistenten (Claude, ChatGPT) laat communiceren met de *ARR media-automatisering stack: Radarr, Sonarr, Lidarr, Readarr en Prowlarr.
 
+> **Let op:** Readarr is sinds mei 2024 retired door upstream (metadata-server onbetrouwbaar, geen onderhoud meer). De tools blijven werken maar worden gemarkeerd als `deprecated` in `arr_get_services` en loggen een warning bij startup. Zie wiki.servarr.com/readarr/status.
+
 ## Stack & technologie
 
 - **Runtime:** Node.js 22, TypeScript (volledig)
@@ -87,4 +89,4 @@ De versie wordt per client meegegeven via `ArrConfig.apiVersion`. `ArrClient` bo
 
 Radarr/Sonarr/Lidarr/Readarr hebben identieke endpoints voor health, quality profiles, root folders, download clients, tags en naming. Prowlarr wijkt af (geen `/movie` of `/series`, wel `/indexer` en `/search`).
 
-Release-flow (Radarr/Sonarr): `GET /release?movieId=X` → kandidaten ophalen → `POST /release { guid, indexerId }` → grab triggeren.
+Release-flow (Radarr/Sonarr/Lidarr): `GET /release?<entity>Id=X` → kandidaten ophalen → `POST /release { guid, indexerId }` → grab triggeren. Prowlarr heeft een vergelijkbare `POST /search { guid, indexerId }` voor het grabben van een losse indexer-hit.

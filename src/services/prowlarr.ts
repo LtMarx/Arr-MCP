@@ -58,4 +58,8 @@ export class ProwlarrService {
   async getHealth(): Promise<Array<{ source: string; type: string; message: string }>> {
     return this.client.get("/health");
   }
+
+  async grab(guid: string, indexerId: number): Promise<Record<string, unknown>> {
+    return this.client.post("/search", { guid, indexerId });
+  }
 }

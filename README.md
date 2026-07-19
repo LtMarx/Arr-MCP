@@ -2,6 +2,8 @@
 
 An MCP server for your \*ARR stack — Radarr, Sonarr, Lidarr, Readarr, and Prowlarr.
 
+> **Readarr is retired by upstream** (since May 2024) — its tools still work but metadata may be unreliable. See [Readarr status](https://wiki.servarr.com/readarr/status).
+
 Supports **stdio** (local, Claude Desktop) and **HTTP/Streamable HTTP** (remote, ChatGPT, any MCP-compatible client).
 
 ## Tools
@@ -63,6 +65,16 @@ Supports **stdio** (local, Claude Desktop) and **HTTP/Streamable HTTP** (remote,
 | `lidarr_add_artist` | Add by MusicBrainz ID |
 | `lidarr_get_albums` | List albums (optionally by artist, paginated) |
 | `lidarr_search_missing` | Trigger search for missing albums |
+| `lidarr_get_releases` | Get available releases for an album |
+| `lidarr_grab_release` | Grab a specific release by GUID |
+| `lidarr_get_history` | Download history (grabs, imports, failures) |
+| `lidarr_get_blocklist` | Blocklist |
+| `lidarr_delete_blocklist_item` | Remove item from blocklist |
+| `lidarr_get_wanted_missing` | Monitored albums with no file |
+| `lidarr_get_queue` | Download queue (paginated) |
+| `lidarr_delete_queue_item` | Remove item from queue |
+| `lidarr_get_diskspace` | Disk space per root folder |
+| `lidarr_get_command_status` | Check status of a triggered command |
 | `lidarr_get_calendar` | Upcoming album releases |
 | `lidarr_get_health` | Health warnings |
 | `lidarr_get_quality_profiles` | Quality profiles |
@@ -72,7 +84,7 @@ Supports **stdio** (local, Claude Desktop) and **HTTP/Streamable HTTP** (remote,
 | `lidarr_get_tags` | Tags |
 | `lidarr_get_status` | System status |
 
-### Readarr (Books)
+### Readarr (Books) — ⚠️ retired upstream
 | Tool | Description |
 |------|-------------|
 | `readarr_get_authors` | List authors (paginated) |
@@ -92,6 +104,7 @@ Supports **stdio** (local, Claude Desktop) and **HTTP/Streamable HTTP** (remote,
 | `prowlarr_test_indexer` | Test a specific indexer |
 | `prowlarr_test_all_indexers` | Test all indexers |
 | `prowlarr_search` | Search across indexers |
+| `prowlarr_grab` | Grab a release found via search |
 | `prowlarr_get_indexer_stats` | Indexer statistics |
 | `prowlarr_get_health` | Health warnings |
 | `prowlarr_get_status` | System status |
