@@ -170,7 +170,7 @@ In http mode zijn er twee niveaus:
 
 ```bash
 curl http://localhost:3000/health
-# → {"status":"ok","transport":"http","version":"1.2.0","uptimeSeconds":42}
+# → {"status":"ok","transport":"http","version":"1.5.0","uptimeSeconds":42}
 
 curl "http://localhost:3000/health?deep=1"
 # → {"status":"degraded", ..., "services":[
@@ -205,7 +205,7 @@ Controleer of de server draait:
 
 ```bash
 curl http://localhost:3000/health
-# → {"status":"ok","transport":"http","version":"1.2.0","uptimeSeconds":42}
+# → {"status":"ok","transport":"http","version":"1.5.0","uptimeSeconds":42}
 ```
 
 ### Container healthcheck

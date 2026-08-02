@@ -37,7 +37,7 @@ const transport = process.env.MCP_TRANSPORT ?? "stdio";
 const httpPort = parseInt(process.env.MCP_PORT ?? "3000", 10);
 const httpHost = process.env.MCP_HOST ?? "0.0.0.0";
 
-const VERSION = "1.2.0";
+const VERSION = "1.5.0";
 
 // ─── HELPERS ───────────────────────────────────────────────────────────────
 
