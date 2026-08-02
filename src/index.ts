@@ -37,10 +37,55 @@ const transport = process.env.MCP_TRANSPORT ?? "stdio";
 const httpPort = parseInt(process.env.MCP_PORT ?? "3000", 10);
 const httpHost = process.env.MCP_HOST ?? "0.0.0.0";
 
+const VERSION = "1.2.0";
+
 // ─── HELPERS ───────────────────────────────────────────────────────────────
 
 function ok(data: unknown): { content: [{ type: "text"; text: string }] } {
   return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+}
+
+interface ServiceCheck {
+  name: string;
+  ok: boolean;
+  ms: number;
+  version?: string;
+  error?: string;
+}
+
+/** Ping every configured *ARR service via its /system/status endpoint. */
+async function checkServices(timeoutMs = 5000): Promise<ServiceCheck[]> {
+  const targets: Array<[string, { getSystemStatus(): Promise<Record<string, unknown>> } | null]> = [
+    ["Radarr", radarr],
+    ["Sonarr", sonarr],
+    ["Lidarr", lidarr],
+    ["Readarr", readarr],
+    ["Prowlarr", prowlarr],
+  ];
+
+  return Promise.all(
+    targets
+      .filter((t): t is [string, { getSystemStatus(): Promise<Record<string, unknown>> }] => t[1] !== null)
+      .map(async ([name, service]) => {
+        const started = Date.now();
+        try {
+          const status = await Promise.race([
+            service.getSystemStatus(),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error(`timeout after ${timeoutMs}ms`)), timeoutMs)
+            ),
+          ]);
+          return { name, ok: true, ms: Date.now() - started, version: String(status.version ?? "") };
+        } catch (err) {
+          return {
+            name,
+            ok: false,
+            ms: Date.now() - started,
+            error: err instanceof Error ? err.message : String(err),
+          };
+        }
+      })
+  );
 }
 
 const pagination = {
@@ -56,7 +101,7 @@ const dateRange = {
 // ─── SERVER FACTORY ────────────────────────────────────────────────────────
 
 function buildServer(): McpServer {
-  const server = new McpServer({ name: "arr-mcp", version: "1.2.0" });
+  const server = new McpServer({ name: "arr-mcp", version: VERSION });
 
   // ── DISCOVERY ─────────────────────────────────────────────────────────
 
@@ -751,13 +796,41 @@ async function startHttp() {
   const httpServer = createServer(async (req, res) => {
     const start = Date.now();
 
-    if (req.method === "GET" && req.url === "/health") {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ status: "ok", transport: "http" }));
+    // Parse the URL so query strings and trailing slashes don't break routing.
+    const { pathname, searchParams } = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+    const route = pathname.replace(/\/+$/, "") || "/";
+
+    if (req.method === "GET" && route === "/health") {
+      const deep = ["1", "true", "yes"].includes((searchParams.get("deep") ?? "").toLowerCase());
+
+      if (!deep) {
+        // Liveness: the process is up and serving. Never depends on *ARR being reachable.
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({
+          status: "ok",
+          transport: "http",
+          version: VERSION,
+          uptimeSeconds: Math.round(process.uptime()),
+        }));
+        return;
+      }
+
+      // Readiness: also verify each configured *ARR service answers.
+      const services = await checkServices();
+      const allOk = services.every((s) => s.ok);
+      log.debug("deep health check", { ok: allOk, services: services.length });
+      res.writeHead(allOk ? 200 : 503, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        status: allOk ? "ok" : "degraded",
+        transport: "http",
+        version: VERSION,
+        uptimeSeconds: Math.round(process.uptime()),
+        services,
+      }));
       return;
     }
 
-    if (req.url !== "/mcp") {
+    if (route !== "/mcp") {
       log.warn("http unknown path", { method: req.method, url: req.url });
       res.writeHead(404);
       res.end("Not found. Use POST /mcp");

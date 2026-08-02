@@ -21,6 +21,9 @@ services:
     profiles: [stdio]
     stdin_open: true
     tty: false
+    # No HTTP server in stdio mode, so there is nothing to probe.
+    healthcheck:
+      disable: true
     environment:
       <<: [*common-env, *arr-env]
       MCP_TRANSPORT: stdio
@@ -33,8 +36,16 @@ services:
     restart: unless-stopped
     ports:
       - "${MCP_PORT:-3000}:${MCP_PORT:-3000}"
+    healthcheck:
+      test: ["CMD", "node", "docker-healthcheck.js"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
     environment:
       <<: [*common-env, *arr-env]
       MCP_TRANSPORT: http
       MCP_PORT: ${MCP_PORT:-3000}
       MCP_HOST: "0.0.0.0"
+      # Set to 1 to also require every configured *ARR service to respond.
+      HEALTHCHECK_DEEP: ${HEALTHCHECK_DEEP:-0}

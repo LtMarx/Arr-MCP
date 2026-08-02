@@ -159,7 +159,26 @@ MCP_TRANSPORT=http MCP_PORT=3000 \
   node dist/index.js
 ```
 
-A `GET /health` endpoint is also available for uptime checks.
+### Health endpoint
+
+In http mode zijn er twee niveaus:
+
+| Request | Betekenis | Status |
+|---|---|---|
+| `GET /health` | **Liveness** — proces draait en serveert | altijd `200` zolang de server leeft |
+| `GET /health?deep=1` | **Readiness** — pingt bovendien elke geconfigureerde \*ARR service | `200` als alles antwoordt, `503` bij één of meer fouten |
+
+```bash
+curl http://localhost:3000/health
+# → {"status":"ok","transport":"http","version":"1.2.0","uptimeSeconds":42}
+
+curl "http://localhost:3000/health?deep=1"
+# → {"status":"degraded", ..., "services":[
+#      {"name":"Radarr","ok":true,"ms":12,"version":"5.14.0"},
+#      {"name":"Sonarr","ok":false,"ms":5000,"error":"timeout after 5000ms"}]}
+```
+
+De plain `/health` is bewust onafhankelijk van je \*ARR services: een kort onbereikbare Radarr maakt de MCP-server zelf niet stuk.
 
 ---
 
@@ -186,8 +205,33 @@ Controleer of de server draait:
 
 ```bash
 curl http://localhost:3000/health
-# → {"status":"ok","transport":"http"}
+# → {"status":"ok","transport":"http","version":"1.2.0","uptimeSeconds":42}
 ```
+
+### Container healthcheck
+
+Het image heeft een ingebouwde `HEALTHCHECK`. Die gebruikt **node**, niet `curl` of `wget` —
+die zitten namelijk niet in `node:22-alpine`. Een eigen healthcheck met `curl -f ...`
+faalt daarom altijd met `curl: not found`; gebruik deze in plaats daarvan:
+
+```yaml
+healthcheck:
+  test: ["CMD", "node", "docker-healthcheck.js"]
+```
+
+Status bekijken:
+
+```bash
+docker compose --profile http ps          # STATUS toont (healthy)
+docker inspect --format '{{json .State.Health}}' <container> | jq
+```
+
+In **stdio mode draait er geen HTTP-server**, dus daar is niets te proben: de check
+stopt direct met exit 0 en in compose staat hij expliciet uit (`healthcheck: disable: true`).
+
+Wil je dat de container ook ongezond wordt als een \*ARR service onbereikbaar is,
+zet dan `HEALTHCHECK_DEEP=1`. Standaard staat dat uit, zodat een herstartende
+Radarr niet je hele MCP-container omlaag trekt.
 
 ### Stdio mode — lokaal (Claude Desktop)
 

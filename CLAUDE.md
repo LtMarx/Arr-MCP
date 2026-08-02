@@ -37,6 +37,7 @@ src/
 - **Stateless HTTP:** elke POST /mcp request krijgt een eigen `McpServer` + `StreamableHTTPServerTransport` instantie (`sessionIdGenerator: undefined`).
 - **Eén client per service:** `ArrClient` is een dunne wrapper; alle logica zit in de service-klassen.
 - **Paginering:** alle lijst-endpoints accepteren `offset` en `limit` parameters.
+- **Health:** `GET /health` is liveness (hangt nooit af van *ARR); `GET /health?deep=1` is readiness en geeft `503` als een geconfigureerde service niet antwoordt. De container-healthcheck (`docker-healthcheck.js`) draait op node, want `node:22-alpine` heeft geen `curl`/`wget`.
 
 ## Configuratie (env vars)
 
@@ -45,6 +46,8 @@ src/
 | `MCP_TRANSPORT` | `stdio` of `http` | `stdio` |
 | `MCP_PORT` | Poort voor HTTP mode | `3000` |
 | `MCP_HOST` | Bind-adres voor HTTP mode | `0.0.0.0` |
+| `LOG_LEVEL` | `DEBUG` / `INFO` / `WARN` / `ERROR` | `INFO` |
+| `HEALTHCHECK_DEEP` | `1` = container-healthcheck eist ook bereikbare *ARR services | `0` |
 | `RADARR_URL` | Base URL van Radarr | — |
 | `RADARR_API_KEY` | API key van Radarr | — |
 | `SONARR_URL` / `_API_KEY` | Sonarr | — |
