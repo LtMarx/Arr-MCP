@@ -15,7 +15,9 @@ COPY docker-healthcheck.js ./
 
 # Only meaningful in http mode; in stdio mode there is no HTTP server to probe,
 # so the check exits 0 immediately. Uses node (always present) instead of
-# curl/wget, which are not installed in node:22-alpine.
+# curl (not installed in node:22-alpine) or wget (busybox wget is present,
+# but honours http_proxy and may resolve localhost to ::1, which this
+# IPv4-only listener refuses).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD ["node", "docker-healthcheck.js"]
 

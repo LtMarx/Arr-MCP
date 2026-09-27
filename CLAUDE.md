@@ -37,7 +37,7 @@ src/
 - **Stateless HTTP:** elke POST /mcp request krijgt een eigen `McpServer` + `StreamableHTTPServerTransport` instantie (`sessionIdGenerator: undefined`).
 - **Eén client per service:** `ArrClient` is een dunne wrapper; alle logica zit in de service-klassen.
 - **Paginering:** alle lijst-endpoints accepteren `offset` en `limit` parameters.
-- **Health:** `GET /health` is liveness (hangt nooit af van *ARR); `GET /health?deep=1` is readiness en geeft `503` als een geconfigureerde service niet antwoordt. De container-healthcheck (`docker-healthcheck.js`) draait op node, want `node:22-alpine` heeft geen `curl`/`wget`.
+- **Health:** `GET /health` is liveness (hangt nooit af van *ARR); `GET /health?deep=1` is readiness en geeft `503` als een geconfigureerde service niet antwoordt. De container-healthcheck (`docker-healthcheck.js`) draait op node: `curl` ontbreekt in `node:22-alpine`, en busybox-`wget` is er wel maar volgt `http_proxy` en kan `localhost` naar `::1` resolven — de server bindt op `0.0.0.0` (IPv4-only) en weigert dat.
 
 ## Configuratie (env vars)
 

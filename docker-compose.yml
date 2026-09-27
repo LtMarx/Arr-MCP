@@ -39,7 +39,9 @@ services:
     # Probe is inline on purpose: it works on any image version and does not
     # depend on a file inside the image (a compose file referencing
     # docker-healthcheck.js breaks against images older than v1.5.0).
-    # curl/wget are not available in node:22-alpine, so use node.
+    # node is used rather than wget: it ignores http_proxy and targets IPv4
+    # explicitly (the server binds 0.0.0.0, so ::1 would be refused).
+    # curl is not installed in node:22-alpine at all.
     healthcheck:
       test:
         - CMD

@@ -1,5 +1,6 @@
-// Container healthcheck. Uses only node builtins so it works in node:22-alpine,
-// which ships without curl or wget.
+// Container healthcheck. Uses only node builtins, so it needs no extra tools
+// and — unlike wget — ignores any http_proxy env var and never resolves
+// "localhost" to ::1 (the server binds 0.0.0.0, which is IPv4 only).
 //
 // stdio mode has no HTTP server, so there is nothing to probe: exit 0.
 // http mode probes GET /health on the configured port.

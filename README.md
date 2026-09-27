@@ -211,8 +211,9 @@ curl http://localhost:3000/health
 ### Container healthcheck
 
 Het image (v1.5.0 en hoger) heeft een ingebouwde `HEALTHCHECK`. Die gebruikt **node**,
-niet `curl` of `wget` — die zitten namelijk niet in `node:22-alpine`. Een eigen
-healthcheck met `curl -f ...` faalt daarom altijd met `curl: not found`.
+niet `curl` of `wget`. `curl` zit niet in `node:22-alpine`, dus een eigen check met
+`curl -f ...` faalt altijd met `curl: not found`. Busybox-`wget` is er wél, maar is
+om twee andere redenen onbetrouwbaar als probe — zie de troubleshooting hieronder.
 
 Gebruik je een eigen compose-bestand, neem dan deze probe over. Hij is bewust
 *inline* en werkt daardoor op elke image-versie:
@@ -256,13 +257,37 @@ ligt — je moet expliciet pullen:
 docker compose pull && docker compose up -d
 ```
 
-**2. Verwijst je healthcheck naar `docker-healthcheck.js`?**
+**2. Gebruik je `wget` met `localhost`?**
+
+```yaml
+test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]   # onbetrouwbaar
+```
+
+Twee valkuilen tegelijk:
+
+- De server bindt op `0.0.0.0`, en dat is **IPv4-only**. Resolvet `localhost` in de
+  container naar `::1`, dan wordt de verbinding geweigerd. Gebruik `127.0.0.1`.
+- Busybox-`wget` volgt `http_proxy`/`HTTP_PROXY`. Staat die in je `env_file`, dan
+  gaat de probe naar de proxy in plaats van naar de container zelf.
+
+Vergelijk beide om dit te bevestigen:
+
+```bash
+docker exec arr-mcp wget -qO- http://localhost:3000/health;  echo "localhost  -> $?"
+docker exec arr-mcp wget -qO- http://127.0.0.1:3000/health;  echo "127.0.0.1  -> $?"
+docker exec arr-mcp env | grep -i proxy
+```
+
+De node-probe hierboven heeft geen van beide problemen: die adresseert expliciet
+IPv4 en negeert proxy-variabelen.
+
+**3. Verwijst je healthcheck naar `docker-healthcheck.js`?**
 
 Dat bestand bestaat pas vanaf v1.5.0. Op een ouder image geeft
 `node docker-healthcheck.js` een `Cannot find module`-fout → exit 1 → `unhealthy`.
 Gebruik de inline probe hierboven, die heeft die afhankelijkheid niet.
 
-**3. Wat zegt de check zelf?**
+**4. Wat zegt de check zelf?**
 
 ```bash
 docker inspect --format '{{json .State.Health}}' arr-mcp | jq '.Log[-1]'
