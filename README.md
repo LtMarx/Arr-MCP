@@ -210,13 +210,24 @@ curl http://localhost:3000/health
 
 ### Container healthcheck
 
-Het image heeft een ingebouwde `HEALTHCHECK`. Die gebruikt **node**, niet `curl` of `wget` —
-die zitten namelijk niet in `node:22-alpine`. Een eigen healthcheck met `curl -f ...`
-faalt daarom altijd met `curl: not found`; gebruik deze in plaats daarvan:
+Het image (v1.5.0 en hoger) heeft een ingebouwde `HEALTHCHECK`. Die gebruikt **node**,
+niet `curl` of `wget` — die zitten namelijk niet in `node:22-alpine`. Een eigen
+healthcheck met `curl -f ...` faalt daarom altijd met `curl: not found`.
+
+Gebruik je een eigen compose-bestand, neem dan deze probe over. Hij is bewust
+*inline* en werkt daardoor op elke image-versie:
 
 ```yaml
 healthcheck:
-  test: ["CMD", "node", "docker-healthcheck.js"]
+  test:
+    - CMD
+    - node
+    - -e
+    - "require('http').get({host:'127.0.0.1',port:process.env.MCP_PORT||3000,path:'/health',timeout:4000},r=>{r.resume();process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))"
+  interval: 30s
+  timeout: 5s
+  start_period: 10s
+  retries: 3
 ```
 
 Status bekijken:
@@ -225,6 +236,40 @@ Status bekijken:
 docker compose --profile http ps          # STATUS toont (healthy)
 docker inspect --format '{{json .State.Health}}' <container> | jq
 ```
+
+#### Container blijft `unhealthy`
+
+Loopt de server prima (`http server started` in de logs) maar staat de container
+toch op `unhealthy`, loop dan deze drie langs:
+
+**1. Draai je wel een recent image?**
+
+```bash
+curl -s http://127.0.0.1:3000/health
+```
+
+Zit er geen `version`-veld in de response, dan draai je een image ouder dan v1.5.0.
+`docker compose up -d` haalt **geen** nieuwe `:latest` op als er al een lokaal image
+ligt — je moet expliciet pullen:
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+**2. Verwijst je healthcheck naar `docker-healthcheck.js`?**
+
+Dat bestand bestaat pas vanaf v1.5.0. Op een ouder image geeft
+`node docker-healthcheck.js` een `Cannot find module`-fout → exit 1 → `unhealthy`.
+Gebruik de inline probe hierboven, die heeft die afhankelijkheid niet.
+
+**3. Wat zegt de check zelf?**
+
+```bash
+docker inspect --format '{{json .State.Health}}' arr-mcp | jq '.Log[-1]'
+```
+
+De `Output` bevat de concrete foutmelding (`curl: not found`,
+`Cannot find module`, connection refused, enz.).
 
 In **stdio mode draait er geen HTTP-server**, dus daar is niets te proben: de check
 stopt direct met exit 0 en in compose staat hij expliciet uit (`healthcheck: disable: true`).
